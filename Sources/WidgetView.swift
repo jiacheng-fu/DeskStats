@@ -317,7 +317,7 @@ struct WidgetView: View {
             }
             Spacer(minLength: 0)
             if !clock.isEmpty {
-                Text(s.charging ? "FULL IN" : "LEFT")
+                Text(s.charging ? "FULL" : "LEFT")
                     .font(.system(size: 6.5, weight: .bold, design: .rounded))
                     .tracking(0.5).foregroundStyle(.tertiary)
                 Text(clock).font(.system(size: 9, weight: .medium, design: .rounded))
@@ -327,6 +327,7 @@ struct WidgetView: View {
                 .font(.system(size: 6.5, weight: .bold, design: .rounded))
                 .tracking(0.5).foregroundStyle(.tertiary)
                 .padding(.leading, 1)
+                .layoutPriority(-1)          // first to yield if the row is tight
             Text(String(format: "%.0f°C", s.batteryTempC))
                 .font(.system(size: 9, weight: .medium, design: .rounded))
                 .monospacedDigit().foregroundStyle(.secondary)
