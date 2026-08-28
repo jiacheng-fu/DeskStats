@@ -1,16 +1,25 @@
 # DeskStats
 
 A small always-on desktop widget for Apple Silicon Macs. Per-core CPU load, GPU
-utilisation, memory, power draw and charging rate — in a 212×212 card that looks
-like it came with the OS.
+utilisation, memory, power draw and charging rate — in a 196×158 card that looks
+like it came with the OS, and shrinks to 118×74 when you only want the gauges.
 
-<img src="docs/screenshot.png" width="320" alt="DeskStats widget">
+Requires no permissions. Holds no power assertions. Costs about 1.4% of one core.
+
+<p>
+  <img src="docs/screenshot.png" width="300" alt="DeskStats, full mode">
+  &nbsp;&nbsp;
+  <img src="docs/mini.png" width="181" alt="DeskStats, mini mode">
+</p>
+
+<sub>Full mode, and mini mode after a single click.</sub>
 
 ## What it shows
 
 | | |
 |---|---|
 | **Watts used** | System draw, derived from adapter input minus what the battery absorbs |
+| **Charging / Draining** | Rate into or out of the battery. Plugged in but draining reads orange — the case macOS reports as "charging" while you lose charge |
 | **CPU** | One bar per core, performance cores separated from efficiency cores |
 | **GPU** | Device utilisation, with renderer and tiler broken out beneath |
 | **MEM** | Active + wired + compressed, the way Activity Monitor counts it |
