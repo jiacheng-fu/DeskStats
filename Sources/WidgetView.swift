@@ -10,7 +10,11 @@ final class Model: ObservableObject {
     private var timer: Timer?
 
     static let interval: TimeInterval = 1.0
+    static let throttledInterval: TimeInterval = 5.0
     static let historyLength = 40
+
+    private var throttled = false
+    private var fpsEnabled: Bool { UserDefaults.standard.object(forKey: "fpsOff") == nil }
 
     init() {
         _ = cpu.sample()                       // prime the tick baseline
@@ -25,12 +29,24 @@ final class Model: ObservableObject {
         fpsCounter.stop()
     }
 
+    /// Sample far less often while the widget is peeked off-screen.
+    func setThrottled(_ on: Bool) {
+        guard on != throttled else { return }
+        throttled = on
+        if timer != nil { suspend(); resume() }
+    }
+
+    func applyFPSPreference() {
+        fpsEnabled ? fpsCounter.start() : fpsCounter.stop()
+    }
+
     func resume() {
         guard timer == nil else { return }
-        fpsCounter.start()
+        if fpsEnabled { fpsCounter.start() }
         _ = cpu.sample()                       // discard ticks accumulated while asleep
         refresh()
-        let t = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: throttled ? Self.throttledInterval : Self.interval,
+                      repeats: true) { [weak self] _ in
             self?.refresh()
         }
         // Tolerance lets the OS coalesce our wakeups with others instead of
@@ -55,9 +71,11 @@ final class Model: ObservableObject {
         next.memTotalGB = m.totalGB
         Metrics.power(into: &next)
 
-        fpsCounter.tick()
-        next.fps = fpsCounter.fps
-        next.fpsAvailable = fpsCounter.available
+        if fpsEnabled {
+            fpsCounter.tick()
+            next.fps = fpsCounter.fps
+            next.fpsAvailable = fpsCounter.available
+        }
         s = next
 
         history.append(next.systemWatts)

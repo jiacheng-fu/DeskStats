@@ -30,8 +30,23 @@ final class ContainerView: NSView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
+    private var pendingPeek: DispatchWorkItem?
+
     override func mouseDown(with event: NSEvent) {
-        if event.clickCount == 2 { app?.togglePeek() } else { super.mouseDown(with: event) }
+        switch event.clickCount {
+        case 2:
+            // Hold the peek briefly: a third click turns this into a quit instead.
+            let work = DispatchWorkItem { [weak self] in self?.app?.togglePeek() }
+            pendingPeek = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval,
+                                          execute: work)
+        case 3:
+            pendingPeek?.cancel()
+            pendingPeek = nil
+            app?.quitCompletely()
+        default:
+            super.mouseDown(with: event)
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -198,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func togglePeek() {
         if let restore = stashedFrame {
             stashedFrame = nil
+            model.setThrottled(false)
             animate(to: restore)
             return
         }
@@ -212,10 +228,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let x = gapRight <= gapLeft ? bounds.maxX - sliver : bounds.minX + sliver - f.width
 
         stashedFrame = f
+        model.setThrottled(true)        // barely visible, so barely sample
         animate(to: NSRect(x: x, y: f.minY, width: f.width, height: f.height))
     }
 
     func clearPeek() { stashedFrame = nil }
+
+    /// Triple-click: leave nothing running. Exiting cleanly (status 0) means the
+    /// LaunchAgent's KeepAlive rule declines to restart us, so the process stays
+    /// gone until the next login or an explicit `stats`.
+    @objc func quitCompletely() {
+        model.suspend()
+        NSApp.terminate(nil)
+    }
 
     private func animate(to frame: NSRect) {
         NSAnimationContext.runAnimationGroup { ctx in
@@ -255,7 +280,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        let fps = NSMenuItem(title: "FPS Counter", action: #selector(toggleFPS), keyEquivalent: "")
+        fps.state = UserDefaults.standard.object(forKey: "fpsOff") == nil ? .on : .off
+        fps.target = self
+        menu.addItem(fps)
         menu.addItem(withTitle: "⌃⌥⌘D cycles placement", action: nil, keyEquivalent: "")
+        menu.addItem(withTitle: "Triple-click to quit · `stats` reopens",
+                     action: nil, keyEquivalent: "")
 
         let login = NSMenuItem(title: "Launch at Login",
                                action: #selector(toggleLogin), keyEquivalent: "")
@@ -271,6 +302,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func pick(_ sender: NSMenuItem) {
         placement = Placement(rawValue: sender.tag) ?? .floating
+    }
+
+    @objc func toggleFPS() {
+        let d = UserDefaults.standard
+        if d.object(forKey: "fpsOff") == nil { d.set(true, forKey: "fpsOff") }
+        else { d.removeObject(forKey: "fpsOff") }
+        model.applyFPSPreference()
     }
 
     @objc func toggleLogin() {

@@ -36,8 +36,26 @@ starts at login. `./build.sh` alone just produces `build/DeskStats.app`.
 |---|---|
 | Drag | Move it anywhere |
 | Double-click | Slide off the nearer edge, leaving 10% visible; again to restore |
-| Right-click | Placement, launch-at-login, quit |
+| **Triple-click** | **Quit outright — the process is gone, not just the window** |
+| Right-click | Placement, FPS toggle, launch-at-login, quit |
 | ⌃⌥⌘D | Cycle placement — the way back out of click-through mode |
+| `stats` | Bring it back up from any terminal |
+
+### Exams and proctoring
+
+Triple-clicking terminates the process cleanly, exiting with status 0. The
+LaunchAgent's `KeepAlive` rule only restarts on a *failed* exit, so a deliberate
+quit is respected and nothing respawns — which is what proctoring software like
+LockDown Browser expects to see. `stats` brings it back afterwards:
+
+```sh
+stats          # start it
+stats off      # stop it
+stats status   # is it running?
+```
+
+While peeked off-screen it drops from a 1 s to a 5 s sample interval, since
+there is nothing to look at.
 
 Three placements: **On Desktop** (pinned to the wallpaper, under every window),
 **Float Above Windows** (default), and **Game Overlay** — above the shielding

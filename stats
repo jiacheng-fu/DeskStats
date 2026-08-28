@@ -1,0 +1,32 @@
+#!/bin/bash
+# stats - bring the DeskStats widget back up (or shut it down).
+#
+# Triple-clicking the widget quits it outright, which is what you want before a
+# proctored exam. This is the way back in.
+LABEL="com.brianfu.deskstats"
+APP="$HOME/Applications/DeskStats.app"
+BIN="$APP/Contents/MacOS/DeskStats"
+
+running() { pgrep -f "DeskStats.app/Contents/MacOS/DeskStats" >/dev/null 2>&1; }
+
+case "${1:-on}" in
+  on|start|"")
+    if running; then echo "stats: already running"; exit 0; fi
+    [ -x "$BIN" ] || { echo "stats: not installed at $APP" >&2; exit 1; }
+    # kickstart goes through launchd so the agent's own settings apply; fall back
+    # to a plain open if the agent was never bootstrapped.
+    launchctl kickstart "gui/$(id -u)/$LABEL" 2>/dev/null || open -a "$APP"
+    sleep 1
+    running && echo "stats: up" || { open -a "$APP"; sleep 1; running && echo "stats: up"; }
+    ;;
+  off|stop|kill)
+    pkill -f "DeskStats.app/Contents/MacOS/DeskStats" 2>/dev/null
+    echo "stats: stopped"
+    ;;
+  status)
+    running && echo "stats: running (pid $(pgrep -f 'DeskStats.app/Contents/MacOS/DeskStats'))" \
+            || echo "stats: not running"
+    ;;
+  *)
+    echo "usage: stats [on|off|status]" >&2; exit 1 ;;
+esac
