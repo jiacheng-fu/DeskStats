@@ -29,6 +29,17 @@ are present.
 Builds the app, copies it to `~/Applications`, and registers a LaunchAgent so it
 starts at login. `./build.sh` alone just produces `build/DeskStats.app`.
 
+To remove it completely:
+
+```sh
+./uninstall.sh
+```
+
+That unloads the launch agent, stops the process, and deletes the app bundle,
+the agent plist, the `stats` command and the preferences domain — everything
+`install.sh` created. The source tree is left alone. Since DeskStats requests no
+system permissions, there is nothing to revoke afterwards.
+
 ## Controls
 
 | Action | Result |
