@@ -62,8 +62,10 @@ crash and gets respawned, while a clean quit is respected.
 While peeked off-screen it drops from a 1 s to a 5 s sample interval, since
 there is nothing to look at.
 
-Click actions are deferred by one `doubleClickInterval` so a further click
-cancels the previous one, and a drag cancels whatever is pending.
+Clicks act immediately; a later click undoes the earlier one. Deferring each
+click by a double-click window made the common gesture — one click into mini
+mode — feel broken, and single clicks vastly outnumber doubles and triples. The
+undo runs unanimated, so the correction is a frame rather than a visible bounce.
 
 Three placements: **On Desktop** (pinned to the wallpaper, under every window),
 **Float Above Windows** (default), and **Game Overlay** — above the shielding

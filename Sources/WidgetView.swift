@@ -152,7 +152,7 @@ struct SquareMeter: View {
                     .fill(heat(value).opacity(0.55))
                     .frame(height: max(3, side * min(1, value)))
                 Text("\(Int(value * 100))")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .frame(maxHeight: .infinity)
             }
@@ -229,8 +229,8 @@ struct WidgetView: View {
 
     private let power = Color(red: 0.40, green: 0.88, blue: 0.58)
 
-    static let fullSize = CGSize(width: 212, height: 212)
-    static let miniSize = CGSize(width: 136, height: 92)
+    static let fullSize = CGSize(width: 196, height: 158)
+    static let miniSize = CGSize(width: 118, height: 74)
 
     var body: some View {
         if model.mini { miniBody } else { fullBody }
@@ -238,28 +238,28 @@ struct WidgetView: View {
 
     /// Mini mode: the four numbers worth glancing at mid-game, nothing else.
     private var miniBody: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(String(format: "%.0f", s.systemWatts))
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                Text("W USED")
-                    .font(.system(size: 7, weight: .bold, design: .rounded))
-                    .tracking(0.8).foregroundStyle(.tertiary)
+                Text("W")
+                    .font(.system(size: 6.5, weight: .bold, design: .rounded))
+                    .tracking(0.6).foregroundStyle(.tertiary)
                 Spacer(minLength: 0)
                 Text("\(s.batteryPct)%")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(s.charging ? power : .secondary)
             }
-            HStack(spacing: 7) {
-                SquareMeter(value: s.cpu, label: "CPU")
-                SquareMeter(value: s.gpu, label: "GPU")
-                SquareMeter(value: s.mem, label: "MEM")
+            HStack(spacing: 5) {
+                SquareMeter(value: s.cpu, label: "CPU", side: 28)
+                SquareMeter(value: s.gpu, label: "GPU", side: 28)
+                SquareMeter(value: s.mem, label: "MEM", side: 28)
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
         .frame(width: Self.miniSize.width, height: Self.miniSize.height)
         .background(
             RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.10), lineWidth: 0.5)
@@ -267,12 +267,12 @@ struct WidgetView: View {
     }
 
     private var fullBody: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 5) {
             header
             heroes
             ZStack(alignment: .topLeading) {
                 Spark(points: model.history, tint: s.external ? power : .orange)
-                    .frame(height: 28)
+                    .frame(height: 21)
                 HStack(spacing: 0) {
                     Text("POWER DRAW · \(Int(Model.historyLength * Int(Model.interval)))s")
                         .font(.system(size: 6.5, weight: .bold, design: .rounded))
@@ -286,8 +286,8 @@ struct WidgetView: View {
             meters
             footer
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(width: Self.fullSize.width, height: Self.fullSize.height)
         .background(
             // Hairline edge gives the card definition against any wallpaper.
@@ -339,7 +339,7 @@ struct WidgetView: View {
             hero(value: String(format: "%.0f", s.systemWatts),
                  caption: "WATTS USED", tint: .white)
             Spacer(minLength: 0)
-            Rectangle().fill(.white.opacity(0.10)).frame(width: 0.5, height: 30)
+            Rectangle().fill(.white.opacity(0.10)).frame(width: 0.5, height: 26)
             Spacer(minLength: 0)
             hero(value: chargeValue, caption: chargeLabel.uppercased(), tint: chargeColor)
         }
@@ -348,17 +348,17 @@ struct WidgetView: View {
     private func hero(value: String, caption: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: -1) {
             Text(value)
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .monospacedDigit().foregroundStyle(tint)
             Text(caption)
-                .font(.system(size: 7, weight: .bold, design: .rounded))
-                .tracking(0.9).foregroundStyle(.tertiary)
+                .font(.system(size: 6.5, weight: .bold, design: .rounded))
+                .tracking(0.8).foregroundStyle(.tertiary)
         }
-        .frame(width: 84, alignment: .leading)
+        .frame(width: 80, alignment: .leading)
     }
 
     private var meters: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             HStack(spacing: 7) {
                 label("CPU")
                 CoreBars(cores: s.cores, performanceCount: Metrics.performanceCoreCount)
@@ -388,13 +388,13 @@ struct WidgetView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             Image(systemName: s.external ? "powerplug.fill" : "battery.50")
-                .font(.system(size: 8)).foregroundStyle(.tertiary)
-            Spacer(minLength: 0)
-            Text(sourceLabel)
-                .font(.system(size: 8, design: .rounded))
+                .font(.system(size: 7)).foregroundStyle(.tertiary)
+            Text(adapterDetail)
+                .font(.system(size: 7.5, design: .rounded))
                 .foregroundStyle(.tertiary).lineLimit(1)
+            Spacer(minLength: 0)
         }
     }
 
@@ -439,6 +439,15 @@ struct WidgetView: View {
         if a.maxWatts > a.watts + 4 { text += String(format: " of %.0f", a.maxWatts) }
         if s.adapters.count > 1 { text += " · \(s.adapters.count) ports" }
         return text
+    }
+
+    /// One line of adapter context: what it gives, at what volts and amps.
+    private var adapterDetail: String {
+        guard s.external, let a = activeAdapter else { return "on battery" }
+        var t = String(format: "%.0f W · %.0fV %.2fA", a.watts, a.volts, a.amps)
+        if a.maxWatts > a.watts + 4 { t += String(format: " · max %.0f", a.maxWatts) }
+        if s.adapters.count > 1 { t += " · \(s.adapters.count) ports" }
+        return t
     }
 
     private var clock: String {

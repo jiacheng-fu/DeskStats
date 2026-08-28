@@ -30,25 +30,20 @@ final class ContainerView: NSView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    /// Each click count defers its action briefly so a further click can cancel
-    /// it: 1 toggles mini, 2 peeks, 3 quits. Dragging cancels whatever is pending.
-    private var pending: DispatchWorkItem?
-
-    private func defer_(_ action: @escaping () -> Void) {
-        pending?.cancel()
-        let work = DispatchWorkItem(block: action)
-        pending = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval,
-                                      execute: work)
-    }
-
+    /// Clicks act immediately and later clicks undo the earlier one, rather than
+    /// every click waiting out a double-click window first. Waiting made the
+    /// common gesture — a single click into mini mode — feel broken, and a single
+    /// click is far more frequent than a double or triple. The undo is done
+    /// unanimated so the correction is a frame, not a visible bounce.
     override func mouseDown(with event: NSEvent) {
         switch event.clickCount {
-        case 1: defer_ { [weak self] in self?.app?.toggleMini() }
-        case 2: defer_ { [weak self] in self?.app?.togglePeek() }
+        case 1:
+            app?.toggleMini(animated: true)
+        case 2:
+            app?.toggleMini(animated: false)        // undo click 1
+            app?.togglePeek(animated: true)
         case 3:
-            pending?.cancel()
-            pending = nil
+            app?.togglePeek(animated: false)        // undo click 2
             app?.quitCompletely()
         default:
             break
@@ -58,9 +53,6 @@ final class ContainerView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        // A drag is not a click: drop the pending mini toggle.
-        pending?.cancel()
-        pending = nil
         // Dragging by hand invalidates the stashed position we would restore to.
         app?.clearPeek()
         super.mouseDragged(with: event)
@@ -207,11 +199,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Double-click slides the card off the nearer vertical edge, X only, leaving
     /// a sliver to grab. Double-clicking the sliver brings it back.
-    @objc func togglePeek() {
+    func togglePeek() { togglePeek(animated: true) }
+
+    func togglePeek(animated: Bool) {
         if let restore = stashedFrame {
             stashedFrame = nil
             model.setThrottled(false)
-            animate(to: restore)
+            animate(to: restore, animated: animated)
             return
         }
         guard let screen = window.screen else { return }
@@ -226,22 +220,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         stashedFrame = f
         model.setThrottled(true)        // barely visible, so barely sample
-        animate(to: NSRect(x: x, y: f.minY, width: f.width, height: f.height))
+        animate(to: NSRect(x: x, y: f.minY, width: f.width, height: f.height),
+                animated: animated)
     }
 
     func clearPeek() { stashedFrame = nil }
 
     /// Mini mode: shrink to power draw and the three load gauges. The top-left
     /// corner stays put so the card grows and shrinks in place.
-    @objc func toggleMini() {
+    @objc func toggleMiniFromMenu() { toggleMini(animated: true) }
+
+    func toggleMini(animated: Bool) {
         model.setMini(!model.mini)
         let size = model.mini ? WidgetView.miniSize : WidgetView.fullSize
         var f = window.frame
         f.origin.y += f.height - size.height
         f.size = NSSize(width: size.width, height: size.height)
         clearPeek()
+        guard animated else { window.setFrame(f, display: true); return }
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.18
+            ctx.duration = 0.1
             window.animator().setFrame(f, display: true)
         }
     }
@@ -254,10 +252,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    private func animate(to frame: NSRect) {
+    private func animate(to frame: NSRect, animated: Bool = true) {
+        guard animated else { window.setFrame(frame, display: true); return }
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.3
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             window.animator().setFrame(frame, display: true)
         }
     }
@@ -293,7 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(withTitle: "⌃⌥⌘D cycles placement", action: nil, keyEquivalent: "")
-        let miniItem = NSMenuItem(title: "Mini Mode", action: #selector(toggleMini),
+        let miniItem = NSMenuItem(title: "Mini Mode", action: #selector(toggleMiniFromMenu),
                                   keyEquivalent: "")
         miniItem.state = model.mini ? .on : .off
         miniItem.target = self
