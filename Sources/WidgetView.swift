@@ -7,7 +7,6 @@ final class Model: ObservableObject {
     @Published var history: [Double] = []      // recent system watts, for the sparkline
 
     private let cpu = CPUSampler()
-    let fpsCounter = FPSCounter()
     private var timer: Timer?
 
     static let interval: TimeInterval = 1.0
@@ -22,7 +21,6 @@ final class Model: ObservableObject {
     /// AppleSmartBattery's entire property tree (kilobytes of nested state). No
     /// reason to pay that every second.
     static let powerEveryNTicks = 5
-    private var fpsEnabled: Bool { UserDefaults.standard.object(forKey: "fpsOff") == nil }
 
     init() {
         _ = cpu.sample()                       // prime the tick baseline
@@ -34,7 +32,6 @@ final class Model: ObservableObject {
     func suspend() {
         timer?.invalidate()
         timer = nil
-        fpsCounter.stop()
     }
 
     func setMini(_ on: Bool) {
@@ -49,13 +46,8 @@ final class Model: ObservableObject {
         if timer != nil { suspend(); resume() }
     }
 
-    func applyFPSPreference() {
-        fpsEnabled ? fpsCounter.start() : fpsCounter.stop()
-    }
-
     func resume() {
         guard timer == nil else { return }
-        if fpsEnabled { fpsCounter.start() }
         _ = cpu.sample()                       // discard ticks accumulated while asleep
         refresh()
         let t = Timer(timeInterval: throttled ? Self.throttledInterval : Self.interval,
@@ -99,11 +91,6 @@ final class Model: ObservableObject {
         next.adapters = cachedPower.adapters
         next.activeAdapter = cachedPower.activeAdapter
 
-        if fpsEnabled {
-            fpsCounter.tick()
-            next.fps = fpsCounter.fps
-            next.fpsAvailable = fpsCounter.available
-        }
         s = next
 
         history.append(next.systemWatts)
@@ -243,7 +230,7 @@ struct WidgetView: View {
     private let power = Color(red: 0.40, green: 0.88, blue: 0.58)
 
     static let fullSize = CGSize(width: 212, height: 212)
-    static let miniSize = CGSize(width: 136, height: 100)
+    static let miniSize = CGSize(width: 136, height: 92)
 
     var body: some View {
         if model.mini { miniBody } else { fullBody }
@@ -253,14 +240,17 @@ struct WidgetView: View {
     private var miniBody: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(s.fpsAvailable && s.fps > 0 ? "\(Int(s.fps.rounded()))" : "––")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                Text(String(format: "%.0f", s.systemWatts))
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(s.fps >= 90 ? power : (s.fps >= 45 ? .yellow : .secondary))
-                Text(s.fpsAvailable ? "FPS" : "FPS · OFF")
+                Text("W USED")
                     .font(.system(size: 7, weight: .bold, design: .rounded))
                     .tracking(0.8).foregroundStyle(.tertiary)
                 Spacer(minLength: 0)
+                Text("\(s.batteryPct)%")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(s.charging ? power : .secondary)
             }
             HStack(spacing: 7) {
                 SquareMeter(value: s.cpu, label: "CPU")
@@ -346,13 +336,12 @@ struct WidgetView: View {
     /// The two numbers worth reading from across the room.
     private var heroes: some View {
         HStack(alignment: .top, spacing: 0) {
-            hero(value: s.fpsAvailable && s.fps > 0 ? "\(Int(s.fps.rounded()))" : "––",
-                 caption: s.fpsAvailable ? "FPS" : "FPS · OFF",
-                 tint: s.fps >= 90 ? power : (s.fps >= 45 ? .yellow : .secondary))
+            hero(value: String(format: "%.0f", s.systemWatts),
+                 caption: "WATTS USED", tint: .white)
             Spacer(minLength: 0)
             Rectangle().fill(.white.opacity(0.10)).frame(width: 0.5, height: 30)
             Spacer(minLength: 0)
-            hero(value: String(format: "%.0f", s.systemWatts), caption: "WATTS USED", tint: .white)
+            hero(value: chargeValue, caption: chargeLabel.uppercased(), tint: chargeColor)
         }
     }
 
@@ -400,12 +389,8 @@ struct WidgetView: View {
 
     private var footer: some View {
         HStack(spacing: 4) {
-            Text(chargeLabel.uppercased())
-                .font(.system(size: 7, weight: .bold, design: .rounded))
-                .tracking(0.7).foregroundStyle(.tertiary)
-            Text(chargeValue)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .monospacedDigit().foregroundStyle(chargeColor)
+            Image(systemName: s.external ? "powerplug.fill" : "battery.50")
+                .font(.system(size: 8)).foregroundStyle(.tertiary)
             Spacer(minLength: 0)
             Text(sourceLabel)
                 .font(.system(size: 8, design: .rounded))

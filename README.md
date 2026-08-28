@@ -10,7 +10,6 @@ like it came with the OS.
 
 | | |
 |---|---|
-| **FPS** | Display presentation rate — tracks a fullscreen game's output (see caveat) |
 | **Watts used** | System draw, derived from adapter input minus what the battery absorbs |
 | **CPU** | One bar per core, performance cores separated from efficiency cores |
 | **GPU** | Device utilisation, with renderer and tiler broken out beneath |
@@ -36,9 +35,9 @@ starts at login. `./build.sh` alone just produces `build/DeskStats.app`.
 |---|---|
 | Drag | Move it anywhere |
 | Double-click | Slide off the nearer edge, leaving 10% visible; again to restore |
-| Single-click | Toggle mini mode — FPS and the three load gauges only |
+| Single-click | Toggle mini mode — power draw and the three load gauges |
 | **Triple-click** | **Quit outright — the process is gone, not just the window** |
-| Right-click | Placement, FPS toggle, launch-at-login, quit |
+| Right-click | Placement, mini mode, launch-at-login, quit |
 | ⌃⌥⌘D | Cycle placement — the way back out of click-through mode |
 | `stats` | Bring it back up from any terminal |
 
@@ -74,6 +73,10 @@ inert in this mode: ⌃⌥⌘D is the way back out.
 
 ## Behaviour
 
+**Requires no permissions at all** — no Screen Recording, no Accessibility, no
+Full Disk Access. Everything comes from IOKit and mach counters that any process
+may read.
+
 Designed to be invisible when it is not wanted:
 
 - **Holds no power assertions.** Never prevents sleep, display sleep or hibernate.
@@ -90,36 +93,16 @@ That number took measuring. SwiftUI `.animation()` modifiers re-render the whole
 card at the display's refresh rate for the animation's duration — on a 240 Hz
 panel that alone was 2.1 points of CPU, so the animations are gone. Drop shadows
 cost similarly, since each forces an offscreen pass per view per frame; ten
-animated core bars with shadows is ten such passes. The `CGDisplayStream` behind
-the FPS counter, which I had assumed was the expensive part, measured at roughly
-0.2 points.
+animated core bars with shadows is ten such passes. A `CGDisplayStream`-based FPS counter, which I had assumed was
+the expensive part, measured at roughly 0.2 points — it was dropped for needing
+Screen Recording permission, not for its cost.
 
-## Two honest limits
+## One honest limit
 
 **Per-GPU-core load does not exist on Apple Silicon.** macOS publishes only three
 aggregate counters — `Device`, `Renderer` and `Tiler Utilization %`. The widget
 shows all three rather than inventing per-core bars. `gpu-core-count` and
 `core_mask_list` in the IORegistry are static topology, not live load.
-
-**FPS needs Screen Recording permission, and macOS will say so bluntly.** The
-prompt reads "DeskStats is trying to record screen and audio" — that is the
-generic TCC string for the ScreenCapture class. The widget captures a 2×2 pixel
-surface to count frame callbacks and touches no audio whatsoever. Grant it under
-System Settings → Privacy & Security → Screen Recording, or right-click the
-widget and switch the FPS counter off to avoid the permission entirely.
-
-Note that an ad-hoc signature (`codesign -s -`) is content-derived, so every
-rebuild produces a new identity and macOS re-prompts. Grants stick once you stop
-rebuilding.
-
-**FPS is a presentation rate, not an in-process frame counter.** There is no
-public API to read another application's frame rate; overlays like RTSS and
-MangoHud inject into the graphics API, which requires disabling SIP. DeskStats
-instead counts display presentation events via `CGDisplayStream`, which tracks a
-fullscreen game's output and is bounded by the display's refresh rate. It needs
-**Screen Recording** permission (System Settings → Privacy & Security → Screen
-Recording); without it the FPS field reads `––`. For authoritative in-game
-numbers, Apple's Metal HUD (`MTL_HUD_ENABLED=1`) is the right tool.
 
 Per-core *temperature* is likewise unavailable — the SMC keys are not readable by
 unprivileged processes on Apple Silicon. The temperature shown is the battery
@@ -131,7 +114,6 @@ Requires only the Xcode Command Line Tools; there is no Xcode project.
 
 ```
 Sources/Metrics.swift     IOKit + mach sampling
-Sources/FPS.swift         CGDisplayStream frame counter
 Sources/WidgetView.swift  SwiftUI presentation
 Sources/main.swift        NSWindow shell, placement, lifecycle
 ```

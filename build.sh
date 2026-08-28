@@ -9,7 +9,7 @@ rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -swift-version 5 \
   -target arm64-apple-macos13.0 \
   -framework AppKit -framework SwiftUI -framework IOKit \
-  Sources/Metrics.swift Sources/FPS.swift Sources/WidgetView.swift Sources/main.swift \
+  Sources/Metrics.swift Sources/WidgetView.swift Sources/main.swift \
   -o "$APP/Contents/MacOS/DeskStats"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'

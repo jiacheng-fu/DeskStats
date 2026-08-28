@@ -8,8 +8,6 @@ struct Sample {
     var gpu = 0.0              // 0...1  (Device Utilization)
     var gpuRenderer = 0.0      // 0...1
     var gpuTiler = 0.0         // 0...1
-    var fps = 0.0              // screen presentation rate
-    var fpsAvailable = false
     var mem = 0.0              // 0...1
     var memUsedGB = 0.0
     var memTotalGB = 0.0

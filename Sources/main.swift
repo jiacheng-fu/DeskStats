@@ -166,12 +166,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Follow the display the widget lives on, so FPS tracks the screen you game on.
-        NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification,
-                                               object: window, queue: .main) { [weak self] _ in
-            self?.retargetFPS()
-        }
-        retargetFPS()
 
         // Sleep/wake: idle completely while asleep, pick straight back up on wake.
         let ws = NSWorkspace.shared.notificationCenter
@@ -182,7 +176,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ws.addObserver(forName: NSWorkspace.didWakeNotification,
                        object: nil, queue: .main) { [weak self] _ in
             self?.model.resume()
-            self?.retargetFPS()
         }
         // Same for display sleep, which is the common case on a laptop.
         ws.addObserver(forName: NSWorkspace.screensDidSleepNotification,
@@ -199,7 +192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main) { [weak self] _ in
             self?.ensureOnScreen()
-            self?.retargetFPS()
         }
     }
 
@@ -211,13 +203,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clearPeek()
         let v = screen.visibleFrame
         window.setFrameOrigin(NSPoint(x: v.maxX - frame.width - 20, y: v.maxY - frame.height - 20))
-    }
-
-    private func retargetFPS() {
-        guard let screen = window.screen,
-              let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-        else { return }
-        model.fpsCounter.retarget(to: CGDirectDisplayID(id.uint32Value))
     }
 
     /// Double-click slides the card off the nearer vertical edge, X only, leaving
@@ -246,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func clearPeek() { stashedFrame = nil }
 
-    /// Mini mode: shrink to just FPS and the three load gauges. The top-left
+    /// Mini mode: shrink to power draw and the three load gauges. The top-left
     /// corner stays put so the card grows and shrinks in place.
     @objc func toggleMini() {
         model.setMini(!model.mini)
@@ -307,10 +292,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let fps = NSMenuItem(title: "FPS Counter", action: #selector(toggleFPS), keyEquivalent: "")
-        fps.state = UserDefaults.standard.object(forKey: "fpsOff") == nil ? .on : .off
-        fps.target = self
-        menu.addItem(fps)
         menu.addItem(withTitle: "⌃⌥⌘D cycles placement", action: nil, keyEquivalent: "")
         let miniItem = NSMenuItem(title: "Mini Mode", action: #selector(toggleMini),
                                   keyEquivalent: "")
@@ -333,13 +314,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func pick(_ sender: NSMenuItem) {
         placement = Placement(rawValue: sender.tag) ?? .floating
-    }
-
-    @objc func toggleFPS() {
-        let d = UserDefaults.standard
-        if d.object(forKey: "fpsOff") == nil { d.set(true, forKey: "fpsOff") }
-        else { d.removeObject(forKey: "fpsOff") }
-        model.applyFPSPreference()
     }
 
     @objc func toggleLogin() {
