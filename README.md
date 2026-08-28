@@ -36,6 +36,7 @@ starts at login. `./build.sh` alone just produces `build/DeskStats.app`.
 |---|---|
 | Drag | Move it anywhere |
 | Double-click | Slide off the nearer edge, leaving 10% visible; again to restore |
+| Single-click | Toggle mini mode — FPS and the three load gauges only |
 | **Triple-click** | **Quit outright — the process is gone, not just the window** |
 | Right-click | Placement, FPS toggle, launch-at-login, quit |
 | ⌃⌥⌘D | Cycle placement — the way back out of click-through mode |
@@ -62,10 +63,14 @@ crash and gets respawned, while a clean quit is respected.
 While peeked off-screen it drops from a 1 s to a 5 s sample interval, since
 there is nothing to look at.
 
+Click actions are deferred by one `doubleClickInterval` so a further click
+cancels the previous one, and a drag cancels whatever is pending.
+
 Three placements: **On Desktop** (pinned to the wallpaper, under every window),
 **Float Above Windows** (default), and **Game Overlay** — above the shielding
 window level so it composites over fullscreen apps, with clicks passing through
-to the game underneath.
+to the game underneath. Note that click-through means the widget is completely
+inert in this mode: ⌃⌥⌘D is the way back out.
 
 ## Behaviour
 

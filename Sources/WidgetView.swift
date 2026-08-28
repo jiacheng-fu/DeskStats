@@ -3,6 +3,7 @@ import SwiftUI
 /// Drives the UI. One timer, one sample, published on the main actor.
 final class Model: ObservableObject {
     @Published var s = Sample()
+    @Published var mini = UserDefaults.standard.bool(forKey: "mini")
     @Published var history: [Double] = []      // recent system watts, for the sparkline
 
     private let cpu = CPUSampler()
@@ -34,6 +35,11 @@ final class Model: ObservableObject {
         timer?.invalidate()
         timer = nil
         fpsCounter.stop()
+    }
+
+    func setMini(_ on: Bool) {
+        mini = on
+        UserDefaults.standard.set(on, forKey: "mini")
     }
 
     /// Sample far less often while the widget is peeked off-screen.
@@ -144,6 +150,34 @@ struct CoreBars: View {
     }
 }
 
+/// Square gauge for mini mode — same trick as a bar, folded into a small box so
+/// three of them fit where one line chart used to.
+struct SquareMeter: View {
+    let value: Double
+    let label: String
+    var side: CGFloat = 36
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: 5).fill(.white.opacity(0.07))
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(heat(value).opacity(0.55))
+                    .frame(height: max(3, side * min(1, value)))
+                Text("\(Int(value * 100))")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(width: side, height: side)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            Text(label)
+                .font(.system(size: 7, weight: .bold, design: .rounded))
+                .tracking(0.5).foregroundStyle(.tertiary)
+        }
+    }
+}
+
 /// Rounded track with a tinted fill.
 struct Bar: View {
     let value: Double
@@ -208,7 +242,41 @@ struct WidgetView: View {
 
     private let power = Color(red: 0.40, green: 0.88, blue: 0.58)
 
+    static let fullSize = CGSize(width: 212, height: 212)
+    static let miniSize = CGSize(width: 136, height: 100)
+
     var body: some View {
+        if model.mini { miniBody } else { fullBody }
+    }
+
+    /// Mini mode: the four numbers worth glancing at mid-game, nothing else.
+    private var miniBody: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(s.fpsAvailable && s.fps > 0 ? "\(Int(s.fps.rounded()))" : "––")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(s.fps >= 90 ? power : (s.fps >= 45 ? .yellow : .secondary))
+                Text(s.fpsAvailable ? "FPS" : "FPS · OFF")
+                    .font(.system(size: 7, weight: .bold, design: .rounded))
+                    .tracking(0.8).foregroundStyle(.tertiary)
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 7) {
+                SquareMeter(value: s.cpu, label: "CPU")
+                SquareMeter(value: s.gpu, label: "GPU")
+                SquareMeter(value: s.mem, label: "MEM")
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .frame(width: Self.miniSize.width, height: Self.miniSize.height)
+        .background(
+            RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.10), lineWidth: 0.5)
+        )
+    }
+
+    private var fullBody: some View {
         VStack(alignment: .leading, spacing: 7) {
             header
             heroes
@@ -230,7 +298,7 @@ struct WidgetView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .frame(width: 212, height: 212)
+        .frame(width: Self.fullSize.width, height: Self.fullSize.height)
         .background(
             // Hairline edge gives the card definition against any wallpaper.
             RoundedRectangle(cornerRadius: 14)

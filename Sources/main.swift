@@ -30,26 +30,37 @@ final class ContainerView: NSView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    private var pendingPeek: DispatchWorkItem?
+    /// Each click count defers its action briefly so a further click can cancel
+    /// it: 1 toggles mini, 2 peeks, 3 quits. Dragging cancels whatever is pending.
+    private var pending: DispatchWorkItem?
+
+    private func defer_(_ action: @escaping () -> Void) {
+        pending?.cancel()
+        let work = DispatchWorkItem(block: action)
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval,
+                                      execute: work)
+    }
 
     override func mouseDown(with event: NSEvent) {
         switch event.clickCount {
-        case 2:
-            // Hold the peek briefly: a third click turns this into a quit instead.
-            let work = DispatchWorkItem { [weak self] in self?.app?.togglePeek() }
-            pendingPeek = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval,
-                                          execute: work)
+        case 1: defer_ { [weak self] in self?.app?.toggleMini() }
+        case 2: defer_ { [weak self] in self?.app?.togglePeek() }
         case 3:
-            pendingPeek?.cancel()
-            pendingPeek = nil
+            pending?.cancel()
+            pending = nil
             app?.quitCompletely()
         default:
-            super.mouseDown(with: event)
+            break
         }
+        // Still forward it, or the window stops being draggable.
+        super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
+        // A drag is not a click: drop the pending mini toggle.
+        pending?.cancel()
+        pending = nil
         // Dragging by hand invalidates the stashed position we would restore to.
         app?.clearPeek()
         super.mouseDragged(with: event)
@@ -113,7 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         container.addSubview(blur)
         container.addSubview(host)
 
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 212, height: 212),
+        let startSize = model.mini ? WidgetView.miniSize : WidgetView.fullSize
+        window = NSWindow(contentRect: NSRect(origin: .zero, size: startSize),
                           styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = container
         NSLayoutConstraint.activate([
@@ -234,6 +246,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func clearPeek() { stashedFrame = nil }
 
+    /// Mini mode: shrink to just FPS and the three load gauges. The top-left
+    /// corner stays put so the card grows and shrinks in place.
+    @objc func toggleMini() {
+        model.setMini(!model.mini)
+        let size = model.mini ? WidgetView.miniSize : WidgetView.fullSize
+        var f = window.frame
+        f.origin.y += f.height - size.height
+        f.size = NSSize(width: size.width, height: size.height)
+        clearPeek()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            window.animator().setFrame(f, display: true)
+        }
+    }
+
     /// Triple-click: leave nothing running. Exiting cleanly (status 0) means the
     /// LaunchAgent's KeepAlive rule declines to restart us, so the process stays
     /// gone until the next login or an explicit `stats`.
@@ -285,8 +312,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fps.target = self
         menu.addItem(fps)
         menu.addItem(withTitle: "⌃⌥⌘D cycles placement", action: nil, keyEquivalent: "")
-        menu.addItem(withTitle: "Triple-click to quit · `stats` reopens",
-                     action: nil, keyEquivalent: "")
+        let miniItem = NSMenuItem(title: "Mini Mode", action: #selector(toggleMini),
+                                  keyEquivalent: "")
+        miniItem.state = model.mini ? .on : .off
+        miniItem.target = self
+        menu.addItem(miniItem)
+        menu.addItem(withTitle: "1× mini · 2× peek · 3× quit", action: nil, keyEquivalent: "")
 
         let login = NSMenuItem(title: "Launch at Login",
                                action: #selector(toggleLogin), keyEquivalent: "")
