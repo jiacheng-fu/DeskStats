@@ -14,6 +14,13 @@ final class Model: ObservableObject {
     static let historyLength = 40
 
     private var throttled = false
+    private var tick = 0
+    private var cachedPower = Sample()      // power fields, refreshed slowly
+
+    /// Battery and adapter change on the order of seconds, and reading them pulls
+    /// AppleSmartBattery's entire property tree (kilobytes of nested state). No
+    /// reason to pay that every second.
+    static let powerEveryNTicks = 5
     private var fpsEnabled: Bool { UserDefaults.standard.object(forKey: "fpsOff") == nil }
 
     init() {
@@ -69,7 +76,22 @@ final class Model: ObservableObject {
         next.mem = m.fraction
         next.memUsedGB = m.usedGB
         next.memTotalGB = m.totalGB
-        Metrics.power(into: &next)
+        tick += 1
+        if tick % Self.powerEveryNTicks == 1 {
+            var fresh = Sample()
+            Metrics.power(into: &fresh)
+            cachedPower = fresh
+        }
+        next.batteryPct = cachedPower.batteryPct
+        next.charging = cachedPower.charging
+        next.external = cachedPower.external
+        next.batteryWatts = cachedPower.batteryWatts
+        next.adapterWatts = cachedPower.adapterWatts
+        next.systemWatts = cachedPower.systemWatts
+        next.batteryTempC = cachedPower.batteryTempC
+        next.minutesRemaining = cachedPower.minutesRemaining
+        next.adapters = cachedPower.adapters
+        next.activeAdapter = cachedPower.activeAdapter
 
         if fpsEnabled {
             fpsCounter.tick()
@@ -190,8 +212,19 @@ struct WidgetView: View {
         VStack(alignment: .leading, spacing: 7) {
             header
             heroes
-            Spark(points: model.history, tint: s.external ? power : .orange)
-                .frame(height: 28)
+            ZStack(alignment: .topLeading) {
+                Spark(points: model.history, tint: s.external ? power : .orange)
+                    .frame(height: 28)
+                HStack(spacing: 0) {
+                    Text("POWER DRAW · \(Int(Model.historyLength * Int(Model.interval)))s")
+                        .font(.system(size: 6.5, weight: .bold, design: .rounded))
+                        .tracking(0.5).foregroundStyle(.tertiary)
+                    Spacer(minLength: 0)
+                    Text(String(format: "peak %.0f W", model.history.max() ?? 0))
+                        .font(.system(size: 6.5, weight: .bold, design: .rounded))
+                        .tracking(0.3).foregroundStyle(.tertiary)
+                }
+            }
             meters
             footer
         }
@@ -226,11 +259,18 @@ struct WidgetView: View {
             }
             Spacer(minLength: 0)
             if !clock.isEmpty {
-                Text(clock).font(.system(size: 9, design: .rounded))
+                Text(s.charging ? "FULL IN" : "LEFT")
+                    .font(.system(size: 6.5, weight: .bold, design: .rounded))
+                    .tracking(0.5).foregroundStyle(.tertiary)
+                Text(clock).font(.system(size: 9, weight: .medium, design: .rounded))
                     .monospacedDigit().foregroundStyle(.secondary)
             }
-            Text(String(format: "%.0f°", s.batteryTempC))
-                .font(.system(size: 9, design: .rounded))
+            Text("BATT")
+                .font(.system(size: 6.5, weight: .bold, design: .rounded))
+                .tracking(0.5).foregroundStyle(.tertiary)
+                .padding(.leading, 1)
+            Text(String(format: "%.0f°C", s.batteryTempC))
+                .font(.system(size: 9, weight: .medium, design: .rounded))
                 .monospacedDigit().foregroundStyle(.secondary)
         }
     }
@@ -239,7 +279,7 @@ struct WidgetView: View {
     private var heroes: some View {
         HStack(alignment: .top, spacing: 0) {
             hero(value: s.fpsAvailable && s.fps > 0 ? "\(Int(s.fps.rounded()))" : "––",
-                 caption: "FPS",
+                 caption: s.fpsAvailable ? "FPS" : "FPS · OFF",
                  tint: s.fps >= 90 ? power : (s.fps >= 45 ? .yellow : .secondary))
             Spacer(minLength: 0)
             Rectangle().fill(.white.opacity(0.10)).frame(width: 0.5, height: 30)
