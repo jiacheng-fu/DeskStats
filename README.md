@@ -62,10 +62,14 @@ crash and gets respawned, while a clean quit is respected.
 While peeked off-screen it drops from a 1 s to a 5 s sample interval, since
 there is nothing to look at.
 
-Clicks act immediately; a later click undoes the earlier one. Deferring each
-click by a double-click window made the common gesture — one click into mini
-mode — feel broken, and single clicks vastly outnumber doubles and triples. The
-undo runs unanimated, so the correction is a frame rather than a visible bounce.
+Click actions wait `min(doubleClickInterval, 0.35s)` so a following click, or a
+drag, can cancel them. Acting on arrival instead was tried and reverted: it
+fired mini mode on the way into every drag, and a second double-click undid a
+peek that the first click of that pair had already re-stashed, sending the card
+further off-screen instead of bringing it back.
+
+Peeking stores only the window's x origin, never a whole frame — a stored frame
+goes stale the moment the card resizes between full and mini.
 
 Three placements: **On Desktop** (pinned to the wallpaper, under every window),
 **Float Above Windows** (default), and **Game Overlay** — above the shielding

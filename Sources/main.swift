@@ -30,20 +30,35 @@ final class ContainerView: NSView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    /// Clicks act immediately and later clicks undo the earlier one, rather than
-    /// every click waiting out a double-click window first. Waiting made the
-    /// common gesture — a single click into mini mode — feel broken, and a single
-    /// click is far more frequent than a double or triple. The undo is done
-    /// unanimated so the correction is a frame, not a visible bounce.
+    /// Actions wait briefly so a following click, or a drag, can cancel them.
+    /// Acting on arrival instead was worse: it fired mini on the way into every
+    /// drag, and undoing a peek that a later click had already re-stashed sent
+    /// the card further off-screen.
+    private var pending: DispatchWorkItem?
+
+    /// Capped below the system double-click interval, which defaults to 0.5s and
+    /// makes a single click feel broken, but left long enough that an unhurried
+    /// double still lands.
+    private static var clickWindow: TimeInterval { min(NSEvent.doubleClickInterval, 0.35) }
+
+    private func defer_(_ action: @escaping () -> Void) {
+        pending?.cancel()
+        let work = DispatchWorkItem(block: action)
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.clickWindow, execute: work)
+    }
+
+    private func cancelPending() {
+        pending?.cancel()
+        pending = nil
+    }
+
     override func mouseDown(with event: NSEvent) {
         switch event.clickCount {
-        case 1:
-            app?.toggleMini(animated: true)
-        case 2:
-            app?.toggleMini(animated: false)        // undo click 1
-            app?.togglePeek(animated: true)
+        case 1: defer_ { [weak self] in self?.app?.toggleMini(animated: true) }
+        case 2: defer_ { [weak self] in self?.app?.togglePeek(animated: true) }
         case 3:
-            app?.togglePeek(animated: false)        // undo click 2
+            cancelPending()
             app?.quitCompletely()
         default:
             break
@@ -53,6 +68,9 @@ final class ContainerView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        // A drag is not a click: drop the pending action so moving the widget
+        // never flips it into mini mode.
+        cancelPending()
         // Dragging by hand invalidates the stashed position we would restore to.
         app?.clearPeek()
         super.mouseDragged(with: event)
@@ -64,17 +82,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = Model()
     private var hotkeyMonitor: Any?
 
-    /// Frame to restore to when un-peeking. Persisted so quitting while tucked
-    /// away does not strand the widget half off-screen on next launch.
-    private var stashedFrame: NSRect? {
+    /// X origin to restore to when un-peeking. Persisted so quitting while tucked
+    /// away does not strand the widget half off-screen on next launch. Only the x
+    /// origin is stored: a whole frame goes stale as soon as the card resizes.
+    private var stashedX: CGFloat? {
         get {
-            guard let s = UserDefaults.standard.string(forKey: "stashedFrame") else { return nil }
-            return NSRectFromString(s)
+            let d = UserDefaults.standard
+            guard d.object(forKey: "stashedX") != nil else { return nil }
+            return CGFloat(d.double(forKey: "stashedX"))
         }
         set {
             let d = UserDefaults.standard
-            newValue.map { d.set(NSStringFromRect($0), forKey: "stashedFrame") }
-                ?? d.removeObject(forKey: "stashedFrame")
+            newValue.map { d.set(Double($0), forKey: "stashedX") }
+                ?? d.removeObject(forKey: "stashedX")
         }
     }
 
@@ -142,9 +162,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setFrameOrigin(NSPoint(x: v.maxX - 232, y: v.maxY - 232))
         }
         // If we were left peeked, come back to the real position.
-        if let restore = stashedFrame {
-            window.setFrame(restore, display: false)
-            stashedFrame = nil
+        if let x = stashedX {
+            window.setFrameOrigin(NSPoint(x: x, y: window.frame.minY))
+            stashedX = nil
         }
         applyPlacement()
         window.orderFront(nil)
@@ -202,14 +222,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func togglePeek() { togglePeek(animated: true) }
 
     func togglePeek(animated: Bool) {
-        if let restore = stashedFrame {
-            stashedFrame = nil
+        let f = window.frame
+        if let x = stashedX {
+            stashedX = nil
             model.setThrottled(false)
-            animate(to: restore, animated: animated)
+            animate(to: NSRect(x: x, y: f.minY, width: f.width, height: f.height),
+                    animated: animated)
             return
         }
         guard let screen = window.screen else { return }
-        let f = window.frame
         let bounds = screen.frame
         let sliver = f.width * Self.peekVisible
 
@@ -218,25 +239,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let gapRight = bounds.maxX - f.maxX
         let x = gapRight <= gapLeft ? bounds.maxX - sliver : bounds.minX + sliver - f.width
 
-        stashedFrame = f
+        stashedX = f.minX
         model.setThrottled(true)        // barely visible, so barely sample
         animate(to: NSRect(x: x, y: f.minY, width: f.width, height: f.height),
                 animated: animated)
     }
 
-    func clearPeek() { stashedFrame = nil }
+    func clearPeek() { stashedX = nil }
 
     /// Mini mode: shrink to power draw and the three load gauges. The top-left
     /// corner stays put so the card grows and shrinks in place.
     @objc func toggleMiniFromMenu() { toggleMini(animated: true) }
 
     func toggleMini(animated: Bool) {
+        // Un-peek first: resizing while tucked away left a stale restore point,
+        // so the next peek measured from the hidden position and went further out.
+        if stashedX != nil { togglePeek(animated: false) }
         model.setMini(!model.mini)
         let size = model.mini ? WidgetView.miniSize : WidgetView.fullSize
         var f = window.frame
         f.origin.y += f.height - size.height
         f.size = NSSize(width: size.width, height: size.height)
-        clearPeek()
         guard animated else { window.setFrame(f, display: true); return }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.1
