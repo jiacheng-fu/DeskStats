@@ -1,32 +1,49 @@
 #!/bin/bash
-# stats - bring the DeskStats widget back up (or shut it down).
+# stats - toggle the DeskStats widget.
 #
-# Triple-clicking the widget quits it outright, which is what you want before a
-# proctored exam. This is the way back in.
+#   stats           toggle: start it if down, stop it if up
+#   stats on        start it
+#   stats off       stop it
+#   stats status    report
+#
+# Stopping goes through AppKit's quit so the process exits with status 0. That
+# matters: the LaunchAgent restarts on a *failed* exit, so a SIGTERM (pkill) is
+# read as a crash and respawned, while a clean quit is respected.
 LABEL="com.brianfu.deskstats"
 APP="$HOME/Applications/DeskStats.app"
 BIN="$APP/Contents/MacOS/DeskStats"
+PATTERN="DeskStats.app/Contents/MacOS/DeskStats"
 
-running() { pgrep -f "DeskStats.app/Contents/MacOS/DeskStats" >/dev/null 2>&1; }
+running() { pgrep -f "$PATTERN" >/dev/null 2>&1; }
 
-case "${1:-on}" in
-  on|start|"")
-    if running; then echo "stats: already running"; exit 0; fi
-    [ -x "$BIN" ] || { echo "stats: not installed at $APP" >&2; exit 1; }
-    # kickstart goes through launchd so the agent's own settings apply; fall back
-    # to a plain open if the agent was never bootstrapped.
-    launchctl kickstart "gui/$(id -u)/$LABEL" 2>/dev/null || open -a "$APP"
-    sleep 1
-    running && echo "stats: up" || { open -a "$APP"; sleep 1; running && echo "stats: up"; }
-    ;;
-  off|stop|kill)
-    pkill -f "DeskStats.app/Contents/MacOS/DeskStats" 2>/dev/null
-    echo "stats: stopped"
-    ;;
+start() {
+  running && { echo "stats: already running"; return 0; }
+  [ -x "$BIN" ] || { echo "stats: not installed at $APP" >&2; return 1; }
+  # Re-bootstrap in case a previous stop unloaded the agent entirely.
+  launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/$LABEL.plist" 2>/dev/null
+  launchctl kickstart "gui/$(id -u)/$LABEL" 2>/dev/null || open -a "$APP"
+  for _ in 1 2 3 4 5 6; do running && { echo "stats: up"; return 0; }; sleep 0.4; done
+  open -a "$APP"; sleep 1
+  running && echo "stats: up" || { echo "stats: failed to start" >&2; return 1; }
+}
+
+stop() {
+  running || { echo "stats: not running"; return 0; }
+  osascript -e 'quit app "DeskStats"' >/dev/null 2>&1
+  for _ in 1 2 3 4 5 6; do running || { echo "stats: stopped"; return 0; }; sleep 0.4; done
+  # Still up: unload the agent so a forced kill cannot be respawned.
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
+  pkill -f "$PATTERN" 2>/dev/null
+  sleep 0.5
+  running && { echo "stats: could not stop" >&2; return 1; } || echo "stats: stopped"
+}
+
+case "${1:-toggle}" in
+  toggle|"") running && stop || start ;;
+  on|start)  start ;;
+  off|stop|kill) stop ;;
   status)
-    running && echo "stats: running (pid $(pgrep -f 'DeskStats.app/Contents/MacOS/DeskStats'))" \
-            || echo "stats: not running"
-    ;;
-  *)
-    echo "usage: stats [on|off|status]" >&2; exit 1 ;;
+    running && echo "stats: running (pid $(pgrep -f "$PATTERN" | head -1))" \
+            || echo "stats: not running" ;;
+  *) echo "usage: stats [on|off|status]" >&2; exit 1 ;;
 esac

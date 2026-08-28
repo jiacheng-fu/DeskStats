@@ -49,10 +49,15 @@ quit is respected and nothing respawns — which is what proctoring software lik
 LockDown Browser expects to see. `stats` brings it back afterwards:
 
 ```sh
-stats          # start it
-stats off      # stop it
-stats status   # is it running?
+stats          # toggle: starts if down, stops if up
+stats on       # start
+stats off      # stop
+stats status   # report
 ```
+
+Stopping goes through AppKit's quit so the exit status is 0. This matters more
+than it looks: `KeepAlive` restarts on a *failed* exit, so `pkill` reads as a
+crash and gets respawned, while a clean quit is respected.
 
 While peeked off-screen it drops from a 1 s to a 5 s sample interval, since
 there is nothing to look at.
@@ -74,7 +79,15 @@ Designed to be invisible when it is not wanted:
   respects a deliberate Quit.
 - Repositions itself if the display it lived on is unplugged.
 
-Costs roughly 0.5–1% CPU and ~50 MB at a 1 Hz sample rate.
+Costs roughly **1.4% CPU and 50 MB** at a 1 Hz sample rate.
+
+That number took measuring. SwiftUI `.animation()` modifiers re-render the whole
+card at the display's refresh rate for the animation's duration — on a 240 Hz
+panel that alone was 2.1 points of CPU, so the animations are gone. Drop shadows
+cost similarly, since each forces an offscreen pass per view per frame; ten
+animated core bars with shadows is ten such passes. The `CGDisplayStream` behind
+the FPS counter, which I had assumed was the expensive part, measured at roughly
+0.2 points.
 
 ## Two honest limits
 
@@ -82,6 +95,17 @@ Costs roughly 0.5–1% CPU and ~50 MB at a 1 Hz sample rate.
 aggregate counters — `Device`, `Renderer` and `Tiler Utilization %`. The widget
 shows all three rather than inventing per-core bars. `gpu-core-count` and
 `core_mask_list` in the IORegistry are static topology, not live load.
+
+**FPS needs Screen Recording permission, and macOS will say so bluntly.** The
+prompt reads "DeskStats is trying to record screen and audio" — that is the
+generic TCC string for the ScreenCapture class. The widget captures a 2×2 pixel
+surface to count frame callbacks and touches no audio whatsoever. Grant it under
+System Settings → Privacy & Security → Screen Recording, or right-click the
+widget and switch the FPS counter off to avoid the permission entirely.
+
+Note that an ad-hoc signature (`codesign -s -`) is content-derived, so every
+rebuild produces a new identity and macOS re-prompts. Grants stick once you stop
+rebuilding.
 
 **FPS is a presentation rate, not an in-process frame counter.** There is no
 public API to read another application's frame rate; overlays like RTSS and

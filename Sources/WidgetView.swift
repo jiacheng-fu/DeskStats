@@ -114,12 +114,11 @@ struct CoreBars: View {
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(heat(v))
                         .frame(height: max(2, 14 * v))
-                        .shadow(color: heat(v).opacity(v > 0.5 ? 0.6 : 0), radius: 2)
                 }
                 .frame(width: 5.5, height: 14)
             }
         }
-        .animation(.easeOut(duration: 0.3), value: cores)
+        // No animation: ten bars interpolating between samples is pure redraw cost.
     }
 }
 
@@ -137,11 +136,9 @@ struct Bar: View {
                     .fill(LinearGradient(colors: [tint.opacity(0.75), tint],
                                          startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(height, g.size.width * min(1, value)))
-                    .shadow(color: tint.opacity(0.45), radius: 2.5)
             }
         }
         .frame(height: height)
-        .animation(.easeOut(duration: 0.35), value: value)
     }
 }
 
@@ -178,7 +175,6 @@ struct Spark: View {
                     for i in 0..<n { i == 0 ? p.move(to: pt(i)) : p.addLine(to: pt(i)) }
                 }
                 .stroke(tint.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
-                .shadow(color: tint.opacity(0.5), radius: 3)
             }
         }
     }
@@ -221,7 +217,7 @@ struct WidgetView: View {
                     .frame(width: max(2, 17 * CGFloat(s.batteryPct) / 100), height: 7.5)
                     .padding(.leading, 1)
             }
-            .animation(.easeOut(duration: 0.4), value: s.batteryPct)
+
 
             Text("\(s.batteryPct)%")
                 .font(.system(size: 10, weight: .semibold, design: .rounded)).monospacedDigit()
